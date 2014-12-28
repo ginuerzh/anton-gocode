@@ -1,8 +1,7 @@
 package main
 
 import (
-	"../common"
-	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/go-gl/gl"
@@ -18,6 +17,7 @@ var (
 	title         string
 	core          bool
 	forward       bool
+	fullscreen    bool
 )
 
 func init() {
@@ -25,6 +25,7 @@ func init() {
 	flag.IntVar(&minor, "minor", 3, "Minor Version")
 	flag.IntVar(&width, "w", 640, "Window Width")
 	flag.IntVar(&height, "h", 480, "Window Height")
+	flag.BoolVar(&fullscreen, "full", false, "Fullscreen")
 	flag.BoolVar(&core, "core", true, "Core Profile")
 	flag.BoolVar(&forward, "forward", true, "Forward Compatible")
 	flag.StringVar(&title, "title", "OpenGL Demo", "Widnow Title")
@@ -135,6 +136,35 @@ func updateFPSCounter(window *glfw.Window) {
 	frameCount++
 }
 
+/* we can run a full-screen window here */
+func fullScreen() (width int, height int, monitor *glfw.Monitor, err error) {
+	glLog("Full Screen Mode\n")
+
+	monitor, err = glfw.GetPrimaryMonitor()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't get primary monitor")
+		return
+	}
+	vm, err := monitor.GetVideoMode()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't get video mode")
+		return
+	}
+
+	vms, err := monitor.GetVideoModes()
+	if err == nil {
+		for _, vm := range vms {
+			glLog("(%d*%d, %dHZ)\n", vm.Width, vm.Height, vm.RefreshRate)
+		}
+	}
+
+	name, _ := monitor.GetName()
+	glLog("Primary monitor: %s (%d*%d, %dHZ)\n\n",
+		name, vm.Width, vm.Height, vm.RefreshRate)
+
+	return vm.Width, vm.Height, monitor, nil
+}
+
 func createVbo() gl.Buffer {
 	points := []gl.GLfloat{
 		0.0, 0.5, 0.0,
@@ -158,6 +188,43 @@ func createVao() gl.VertexArray {
 	return vao
 }
 
+func createShader(shaderType gl.GLenum, src []byte) (gl.Shader, error) {
+	shader := gl.CreateShader(shaderType)
+	shader.Source(string(src))
+	shader.Compile()
+
+	if shader.Get(gl.COMPILE_STATUS) == int(gl.FALSE) {
+		infoLog := shader.GetInfoLog()
+		shader.Delete()
+		return shader, errors.New("Compile: " + infoLog)
+	}
+
+	return shader, nil
+}
+
+func createProgram(shaders ...gl.Shader) (gl.Program, error) {
+	program := gl.CreateProgram()
+
+	for _, shader := range shaders {
+		program.AttachShader(shader)
+	}
+
+	program.Link()
+	if program.Get(gl.LINK_STATUS) == int(gl.FALSE) {
+		infoLog := program.GetInfoLog()
+		program.Delete()
+		return program, errors.New("Link: " + infoLog)
+	}
+
+	program.Validate()
+	if program.Get(gl.VALIDATE_STATUS) == int(gl.FALSE) {
+		infoLog := program.GetInfoLog()
+		program.Delete()
+		return program, errors.New("Validate: " + infoLog)
+	}
+
+	return program, nil
+}
 func main() {
 	restartGLLog()
 	glLog("starting GLFW\n%s\n\n", glfw.GetVersionString())
@@ -179,15 +246,27 @@ func main() {
 	if core && major >= 3 && minor >= 2 {
 		glfw.WindowHint(glfw.OpenglProfile, glfw.OpenglCoreProfile)
 	}
-	glfw.WindowHint(glfw.Samples, 4)
+	glfw.WindowHint(glfw.Samples, 16)
 
-	window, err := glfw.CreateWindow(width, height, title, nil, nil)
+	var monitor *glfw.Monitor
+	if fullscreen {
+		width, height, monitor, _ = fullScreen()
+	}
+
+	window, err := glfw.CreateWindow(width, height, title, monitor, nil)
 	if err != nil {
 		panic(err)
 	}
 	defer window.Destroy()
 
+	window.SetSizeCallback(func(win *glfw.Window, w, h int) {
+		width = w
+		height = h
+		//fmt.Printf("width %d height %d\n", width, height)
+	})
+
 	window.MakeContextCurrent()
+
 	if r := gl.Init(); r > 0 {
 		fmt.Println("init opengl:", r)
 	}
@@ -224,23 +303,21 @@ func main() {
 		frag_colour = vec4 (0.5, 0.0, 0.5, 1.0);
 	}
 `
-	vs, err := common.CreateShader(gl.VERTEX_SHADER,
-		bytes.NewReader([]byte(vertex_shader)))
+	vs, err := createShader(gl.VERTEX_SHADER, []byte(vertex_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	defer vs.Delete()
 
-	fs, err := common.CreateShader(gl.FRAGMENT_SHADER,
-		bytes.NewReader([]byte(fragment_shader)))
+	fs, err := createShader(gl.FRAGMENT_SHADER, []byte(fragment_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	defer fs.Delete()
 
-	program, err := common.CreateProgram(vs, fs)
+	program, err := createProgram(vs, fs)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -250,11 +327,16 @@ func main() {
 		updateFPSCounter(window)
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+		gl.Viewport(0, 0, width, height)
 
 		program.Use()
 		gl.DrawArrays(gl.TRIANGLES, 0, 3)
 
 		glfw.PollEvents()
 		window.SwapBuffers()
+
+		if window.GetKey(glfw.KeyEscape) == glfw.Press {
+			window.SetShouldClose(true)
+		}
 	}
 }

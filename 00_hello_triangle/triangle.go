@@ -1,8 +1,7 @@
 package main
 
 import (
-	"../common"
-	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/go-gl/gl"
@@ -49,6 +48,44 @@ func createVao() gl.VertexArray {
 	attrLoc.AttribPointer(3, gl.FLOAT, false, 0, nil)
 
 	return vao
+}
+
+func createShader(shaderType gl.GLenum, src []byte) (gl.Shader, error) {
+	shader := gl.CreateShader(shaderType)
+	shader.Source(string(src))
+	shader.Compile()
+
+	if shader.Get(gl.COMPILE_STATUS) == int(gl.FALSE) {
+		infoLog := shader.GetInfoLog()
+		shader.Delete()
+		return shader, errors.New("Compile: " + infoLog)
+	}
+
+	return shader, nil
+}
+
+func createProgram(shaders ...gl.Shader) (gl.Program, error) {
+	program := gl.CreateProgram()
+
+	for _, shader := range shaders {
+		program.AttachShader(shader)
+	}
+
+	program.Link()
+	if program.Get(gl.LINK_STATUS) == int(gl.FALSE) {
+		infoLog := program.GetInfoLog()
+		program.Delete()
+		return program, errors.New("Link: " + infoLog)
+	}
+
+	program.Validate()
+	if program.Get(gl.VALIDATE_STATUS) == int(gl.FALSE) {
+		infoLog := program.GetInfoLog()
+		program.Delete()
+		return program, errors.New("Validate: " + infoLog)
+	}
+
+	return program, nil
 }
 
 func main() {
@@ -104,23 +141,21 @@ func main() {
 		frag_colour = vec4 (0.5, 0.0, 0.5, 1.0);
 	}
 `
-	vs, err := common.CreateShader(gl.VERTEX_SHADER,
-		bytes.NewReader([]byte(vertex_shader)))
+	vs, err := createShader(gl.VERTEX_SHADER, []byte(vertex_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	defer vs.Delete()
 
-	fs, err := common.CreateShader(gl.FRAGMENT_SHADER,
-		bytes.NewReader([]byte(fragment_shader)))
+	fs, err := createShader(gl.FRAGMENT_SHADER, []byte(fragment_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	defer fs.Delete()
 
-	program, err := common.CreateProgram(vs, fs)
+	program, err := createProgram(vs, fs)
 	if err != nil {
 		fmt.Println(err)
 	}
