@@ -44,10 +44,6 @@ func init() {
 	flag.Parse()
 }
 
-func GetConfig() Config {
-	return config
-}
-
 func StartGL(title string) (window *glfw.Window, err error) {
 	restartGLLog()
 
@@ -316,10 +312,79 @@ func CreateProgram(shaders ...gl.Shader) (gl.Program, error) {
 	return program, nil
 }
 
-func ShaderDetail(program gl.Program) {
+func PrintAll(program gl.Program) {
 	fmt.Printf("--------------------\nshader programme %d info:\n", program)
 	fmt.Printf("GL_LINK_STATUS = %d\n", program.Get(gl.LINK_STATUS))
+	fmt.Printf("GL_VALIDATE_STATUS = %d\n", program.Get(gl.VALIDATE_STATUS))
 	fmt.Printf("GL_ATTACHED_SHADERS = %d\n", program.Get(gl.ATTACHED_SHADERS))
-	fmt.Printf("GL_ACTIVE_ATTRIBUTES = %d\n", program.Get(gl.ACTIVE_ATTRIBUTES))
 
+	activeAttrs := program.Get(gl.ACTIVE_ATTRIBUTES)
+	fmt.Printf("GL_ACTIVE_ATTRIBUTES = %d\n", activeAttrs)
+
+	for i := 0; i < activeAttrs; i++ {
+		size, typ, name := program.GetActiveAttrib(i)
+		if size > 1 {
+			for j := 0; j < size; j++ {
+				longName := fmt.Sprintf("%s[%d]", name, j)
+				fmt.Printf(" %d) type:%s name:%s location:%d\n",
+					i, glType2String(typ), name, program.GetAttribLocation(longName))
+			}
+		} else {
+			fmt.Printf(" %d) type:%s name:%s location:%d\n",
+				i, glType2String(typ), name, program.GetAttribLocation(name))
+		}
+	}
+
+	activeUniforms := program.Get(gl.ACTIVE_UNIFORMS)
+	fmt.Printf("GL_ACTIVE_UNIFORMS = %d\n", activeUniforms)
+
+	for i := 0; i < activeUniforms; i++ {
+		size, typ, name := program.GetActiveUniform(i)
+		if size > 1 {
+			for j := 0; j < size; j++ {
+				longName := fmt.Sprintf("%s[%d]", name, j)
+				fmt.Printf(" %d) type:%s name:%s location:%d\n",
+					i, glType2String(typ), name, program.GetUniformLocation(longName))
+			}
+		} else {
+			fmt.Printf(" %d) type:%s name:%s location:%d\n",
+				i, glType2String(typ), name, program.GetUniformLocation(name))
+		}
+	}
+
+	fmt.Printf("Program info log for GL index %d:\n%s", program, program.GetInfoLog())
+}
+
+func glType2String(typ gl.GLenum) string {
+	switch typ {
+	case gl.BOOL:
+		return "bool"
+	case gl.INT:
+		return "int"
+	case gl.FLOAT:
+		return "float"
+	case gl.FLOAT_VEC2:
+		return "vec2"
+	case gl.FLOAT_VEC3:
+		return "vec3"
+	case gl.FLOAT_VEC4:
+		return "vec4"
+	case gl.FLOAT_MAT2:
+		return "mat2"
+	case gl.FLOAT_MAT3:
+		return "mat3"
+	case gl.FLOAT_MAT4:
+		return "mat4"
+	case gl.SAMPLER_2D:
+		return "sampler2D"
+	case gl.SAMPLER_3D:
+		return "sampler3D"
+	case gl.SAMPLER_CUBE:
+		return "samplerCube"
+	case gl.SAMPLER_2D_SHADOW:
+		return "sampler2DShadow"
+	default:
+	}
+
+	return "other"
 }

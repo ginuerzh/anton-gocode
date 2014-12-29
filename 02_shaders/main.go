@@ -70,11 +70,12 @@ func main() {
 	}
 	defer program.Delete()
 
-	common.ShaderDetail(program)
+	common.PrintAll(program)
 
 	colorLoc := program.GetUniformLocation("inputColour")
 	if colorLoc < 0 {
-		fmt.Fprintf(os.Stderr, "Invalid uniform location %d\n", colorLoc)
+		fmt.Fprintf(os.Stderr, "Can't find uniform %s, location %d\n",
+			"inputColour", colorLoc)
 		return
 	}
 	program.Use()
