@@ -4,8 +4,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/go-gl/gl"
-	glfw "github.com/go-gl/glfw3"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.1/glfw"
+	"runtime"
+	"unsafe"
 )
 
 var (
@@ -17,6 +19,8 @@ var (
 )
 
 func init() {
+	runtime.LockOSThread()
+
 	flag.IntVar(&major, "major", 3, "Major Version")
 	flag.IntVar(&minor, "minor", 3, "Minor Version")
 	flag.IntVar(&width, "w", 640, "Window Width")
@@ -27,61 +31,105 @@ func init() {
 	flag.Parse()
 }
 
-func createVbo() gl.Buffer {
-	points := []gl.GLfloat{
+func createVbo() (buffer uint32) {
+	points := []float32{
 		0.0, 0.5, 0.0,
 		0.5, -0.5, 0.0,
 		-0.5, -0.5, 0.0,
 	}
-	buffer := gl.GenBuffer()
-	buffer.Bind(gl.ARRAY_BUFFER)
-	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, points, gl.STATIC_DRAW)
+	gl.GenBuffers(1, &buffer)
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffer)
+	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, unsafe.Pointer(&points[0]), gl.STATIC_DRAW)
 
-	return buffer
+	return
 }
 
-func createVao() gl.VertexArray {
-	vao := gl.GenVertexArray()
-	vao.Bind()
-	var attrLoc gl.AttribLocation = 0
-	attrLoc.EnableArray()
-	attrLoc.AttribPointer(3, gl.FLOAT, false, 0, nil)
+func createVao() (array uint32) {
+	gl.GenVertexArrays(1, &array)
+	gl.BindVertexArray(array)
+	var index uint32 = 0
+	gl.EnableVertexArrayAttrib(array, index)
+	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, nil)
 
-	return vao
+	return
 }
 
-func createShader(shaderType gl.GLenum, src []byte) (gl.Shader, error) {
+func getShanderInfoLog(shader uint32) string {
+	var length int32
+	var infoLog []byte
+	gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &length)
+	if length > 0 {
+		infoLog = make([]byte, length)
+		gl.GetShaderInfoLog(shader, length, nil, &infoLog[0])
+	}
+
+	return string(infoLog)
+}
+
+func CreateShader(shaderType uint32, src []byte) (uint32, error) {
 	shader := gl.CreateShader(shaderType)
-	shader.Source(string(src))
-	shader.Compile()
+	xstring := &src[0]
+	gl.ShaderSource(shader, 1, &xstring, nil)
+	gl.CompileShader(shader)
 
-	if shader.Get(gl.COMPILE_STATUS) == int(gl.FALSE) {
-		infoLog := shader.GetInfoLog()
-		shader.Delete()
+	var status int32
+	gl.GetShaderiv(shader, gl.COMPILE_STATUS, &status)
+
+	infoLog := getShanderInfoLog(shader)
+	if len(infoLog) > 0 {
+		fmt.Printf("shader info log for GL index %d:\n%s\n", shader, infoLog)
+	}
+
+	if status == gl.FALSE {
+		gl.DeleteShader(shader)
 		return shader, errors.New("Compile: " + infoLog)
 	}
 
 	return shader, nil
 }
 
-func createProgram(shaders ...gl.Shader) (gl.Program, error) {
+func getProgramInfoLog(program uint32) string {
+	var length int32
+	var infoLog []byte
+	gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &length)
+	if length > 0 {
+		infoLog = make([]byte, length)
+		gl.GetProgramInfoLog(program, length, nil, &infoLog[0])
+	}
+
+	return string(infoLog)
+}
+
+func CreateProgram(shaders ...uint32) (uint32, error) {
 	program := gl.CreateProgram()
 
 	for _, shader := range shaders {
-		program.AttachShader(shader)
+		gl.AttachShader(program, shader)
 	}
 
-	program.Link()
-	if program.Get(gl.LINK_STATUS) == int(gl.FALSE) {
-		infoLog := program.GetInfoLog()
-		program.Delete()
+	gl.LinkProgram(program)
+
+	var status int32
+	gl.GetProgramiv(program, gl.LINK_STATUS, &status)
+
+	infoLog := getProgramInfoLog(program)
+	if len(infoLog) > 0 {
+		fmt.Printf("Program link info log for GL index %d:\n%s\n", program, infoLog)
+	}
+
+	if status == gl.FALSE {
+		gl.DeleteProgram(program)
 		return program, errors.New("Link: " + infoLog)
 	}
 
-	program.Validate()
-	if program.Get(gl.VALIDATE_STATUS) == int(gl.FALSE) {
-		infoLog := program.GetInfoLog()
-		program.Delete()
+	gl.ValidateProgram(program)
+	gl.GetProgramiv(program, gl.VALIDATE_STATUS, &status)
+	infoLog = getProgramInfoLog(program)
+	if len(infoLog) > 0 {
+		fmt.Printf("Program validate info log for GL index %d:\n%s\n", program, infoLog)
+	}
+	if status == gl.FALSE {
+		gl.DeleteProgram(program)
 		return program, errors.New("Validate: " + infoLog)
 	}
 
@@ -89,22 +137,24 @@ func createProgram(shaders ...gl.Shader) (gl.Program, error) {
 }
 
 func main() {
-	glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
-		fmt.Printf("[error] %v: %v\n", err, desc)
-	})
+	/*
+		glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
+			fmt.Printf("[error] %v: %v\n", err, desc)
+		})
+	*/
 
-	if !glfw.Init() {
-		panic("Can't init glfw!")
+	if err := glfw.Init(); err != nil {
+		panic(err)
 	}
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.ContextVersionMajor, major)
 	glfw.WindowHint(glfw.ContextVersionMinor, minor)
 	if forward && major >= 3 {
-		glfw.WindowHint(glfw.OpenglForwardCompatible, 1)
+		glfw.WindowHint(glfw.OpenGLForwardCompatible, 1)
 	}
 	if core && major >= 3 && minor >= 2 {
-		glfw.WindowHint(glfw.OpenglProfile, glfw.OpenglCoreProfile)
+		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	}
 	window, err := glfw.CreateWindow(width, height, title, nil, nil)
 	if err != nil {
@@ -113,18 +163,18 @@ func main() {
 	defer window.Destroy()
 
 	window.MakeContextCurrent()
-	if r := gl.Init(); r > 0 {
-		fmt.Println("init opengl:", r)
+	if err := gl.Init(); err != nil {
+		panic(err)
 	}
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LESS)
 
 	buffer := createVbo()
-	defer buffer.Delete()
+	defer gl.DeleteBuffers(1, &buffer)
 
 	vao := createVao()
-	defer vao.Delete()
+	defer gl.DeleteVertexArrays(1, &vao)
 
 	vertex_shader := `
 	#version 330
@@ -141,30 +191,31 @@ func main() {
 		frag_colour = vec4 (0.5, 0.0, 0.5, 1.0);
 	}
 `
-	vs, err := createShader(gl.VERTEX_SHADER, []byte(vertex_shader))
+	vs, err := CreateShader(gl.VERTEX_SHADER, []byte(vertex_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer vs.Delete()
+	defer gl.DeleteShader(vs)
 
-	fs, err := createShader(gl.FRAGMENT_SHADER, []byte(fragment_shader))
+	fs, err := CreateShader(gl.FRAGMENT_SHADER, []byte(fragment_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer fs.Delete()
+	defer gl.DeleteShader(fs)
 
-	program, err := createProgram(vs, fs)
+	program, err := CreateProgram(vs, fs)
 	if err != nil {
 		fmt.Println(err)
 	}
-	defer program.Delete()
+	defer gl.DeleteProgram(program)
+
+	gl.UseProgram(program)
 
 	for !window.ShouldClose() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		program.Use()
 		gl.DrawArrays(gl.TRIANGLES, 0, 3)
 
 		glfw.PollEvents()

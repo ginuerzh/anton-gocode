@@ -4,8 +4,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/go-gl/gl"
-	glfw "github.com/go-gl/glfw3"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.1/glfw"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -48,23 +48,24 @@ func StartGL(title string) (window *glfw.Window, err error) {
 	restartGLLog()
 
 	GLog("starting GLFW\n%s\n\n", glfw.GetVersionString())
+	/*
+		glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
+			GLogErr("GLFW ERROR: code %d msg: %s\n", err, desc)
+		})
+	*/
 
-	glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
-		GLogErr("GLFW ERROR: code %d msg: %s\n", err, desc)
-	})
-
-	if !glfw.Init() {
-		GLogErr("ERROR: could not init GLFW3\n")
-		return nil, errors.New("ERROR: could not init GLFW3")
+	if err := glfw.Init(); err != nil {
+		GLogErr("ERROR: could not init GLFW3: %s\n", err.Error())
+		return nil, err
 	}
 
 	glfw.WindowHint(glfw.ContextVersionMajor, config.Major)
 	glfw.WindowHint(glfw.ContextVersionMinor, config.Minor)
 	if config.Forward && config.Major >= 3 {
-		glfw.WindowHint(glfw.OpenglForwardCompatible, 1)
+		glfw.WindowHint(glfw.OpenGLForwardCompatible, 1)
 	}
 	if config.Core && config.Major >= 3 && config.Minor >= 2 {
-		glfw.WindowHint(glfw.OpenglProfile, glfw.OpenglCoreProfile)
+		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	}
 	glfw.WindowHint(glfw.Samples, 16)
 
@@ -85,19 +86,19 @@ func StartGL(title string) (window *glfw.Window, err error) {
 		config.Width = w
 		config.Height = h
 		//fmt.Printf("width %d height %d\n", width, height)
-		gl.Viewport(0, 0, config.Width, config.Height)
+		gl.Viewport(0, 0, int32(config.Width), int32(config.Height))
 	})
 
 	window.MakeContextCurrent()
 
-	if r := gl.Init(); r > 0 {
-		GLogErr("ERROR: could not init OpenGL\n")
-		err = errors.New("ERROR: could not init OpenGL")
+	if err = gl.Init(); err != nil {
+		GLogErr("ERROR: could not init OpenGL: %s\n", err.Error())
 		glfw.Terminate()
 		return
 	}
 
-	GLog("Vendor: %s\n", gl.GetString(gl.VENDOR))
+	vendor := gl.GetString(gl.VENDOR)
+	GLog("Vendor: %s\n", vendor)
 	GLog("Renderer: %s\n", gl.GetString(gl.RENDERER))
 	GLog("Version: %s\n", gl.GetString(gl.VERSION))
 	GLog("Shading language version: %s\n", gl.GetString(gl.SHADING_LANGUAGE_VERSION))
@@ -153,7 +154,7 @@ func GLogErr(message string, a ...interface{}) error {
 }
 
 func logGLParams() {
-	params := []gl.GLenum{
+	params := []uint32{
 		gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS,
 		gl.MAX_CUBE_MAP_TEXTURE_SIZE,
 		gl.MAX_DRAW_BUFFERS,
@@ -187,15 +188,15 @@ func logGLParams() {
 	p := make([]int32, 2)
 	for i, v := range params {
 		if v == gl.STEREO {
-			p := make([]bool, 1)
-			gl.GetBooleanv(v, p)
-			GLog("%s %v\n", names[i], p[0])
+			p := false
+			gl.GetBooleanv(v, &p)
+			GLog("%s %v\n", names[i], p)
 			continue
 		}
 
 		p[0] = 0
 		p[1] = 0
-		gl.GetIntegerv(v, p)
+		gl.GetIntegerv(v, &p[0])
 		if v == gl.MAX_VIEWPORT_DIMS {
 			GLog("%s %d %d\n", names[i], p[0], p[1])
 			continue
@@ -236,32 +237,16 @@ func ShowFPS(window *glfw.Window) float64 {
 func fullscreen() (width int, height int, monitor *glfw.Monitor, err error) {
 	GLog("Full Screen Mode\n")
 
-	monitor, err = glfw.GetPrimaryMonitor()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't get primary monitor")
-		return
-	}
-	vm, err := monitor.GetVideoMode()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't get video mode")
-		return
-	}
+	monitor = glfw.GetPrimaryMonitor()
+	vm := monitor.GetVideoMode()
 
-	vms, err := monitor.GetVideoModes()
-	if err == nil {
-		for _, vm := range vms {
-			GLog("(%d*%d, %dHZ)\n", vm.Width, vm.Height, vm.RefreshRate)
-		}
-	}
-
-	name, _ := monitor.GetName()
 	GLog("Primary monitor: %s (%d*%d, %dHZ)\n\n",
-		name, vm.Width, vm.Height, vm.RefreshRate)
+		monitor.GetName(), vm.Width, vm.Height, vm.RefreshRate)
 
 	return vm.Width, vm.Height, monitor, nil
 }
 
-func CreateShaderFile(shaderType gl.GLenum, filename string) (gl.Shader, error) {
+func CreateShaderFile(shaderType uint32, filename string) (uint32, error) {
 	src, err := ioutil.ReadFile(filename)
 	if err != nil {
 		GLogErr("ERROR: opening shader file %s: %s\n", filename, err)
@@ -271,91 +256,161 @@ func CreateShaderFile(shaderType gl.GLenum, filename string) (gl.Shader, error) 
 	return CreateShader(shaderType, src)
 }
 
-func CreateShader(shaderType gl.GLenum, src []byte) (gl.Shader, error) {
-	shader := gl.CreateShader(shaderType)
-	shader.Source(string(src))
-	shader.Compile()
+func getShanderInfoLog(shader uint32) string {
+	var length int32
+	var infoLog []byte
+	gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &length)
+	if length > 0 {
+		infoLog = make([]byte, length)
+		gl.GetShaderInfoLog(shader, length, nil, &infoLog[0])
+	}
 
-	if shader.Get(gl.COMPILE_STATUS) == int(gl.FALSE) {
-		infoLog := shader.GetInfoLog()
+	return string(infoLog)
+}
+
+func CreateShader(shaderType uint32, src []byte) (uint32, error) {
+	shader := gl.CreateShader(shaderType)
+	xstring := &src[0]
+	gl.ShaderSource(shader, 1, &xstring, nil)
+	gl.CompileShader(shader)
+
+	var status int32
+	gl.GetShaderiv(shader, gl.COMPILE_STATUS, &status)
+
+	infoLog := getShanderInfoLog(shader)
+	if len(infoLog) > 0 {
 		GLogErr("shader info log for GL index %d:\n%s\n", shader, infoLog)
-		shader.Delete()
+	}
+
+	if status == gl.FALSE {
+		gl.DeleteShader(shader)
 		return shader, errors.New("Compile: " + infoLog)
 	}
 
 	return shader, nil
 }
 
-func CreateProgram(shaders ...gl.Shader) (gl.Program, error) {
+func getProgramInfoLog(program uint32) string {
+	var length int32
+	var infoLog []byte
+	gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &length)
+	if length > 0 {
+		infoLog = make([]byte, length)
+		gl.GetProgramInfoLog(program, length, nil, &infoLog[0])
+	}
+
+	return string(infoLog)
+}
+
+func CreateProgram(shaders ...uint32) (uint32, error) {
 	program := gl.CreateProgram()
 
 	for _, shader := range shaders {
-		program.AttachShader(shader)
+		gl.AttachShader(program, shader)
 	}
 
-	program.Link()
-	if program.Get(gl.LINK_STATUS) == int(gl.FALSE) {
-		infoLog := program.GetInfoLog()
+	gl.LinkProgram(program)
+
+	var status int32
+	gl.GetProgramiv(program, gl.LINK_STATUS, &status)
+
+	infoLog := getProgramInfoLog(program)
+	if len(infoLog) > 0 {
 		GLogErr("Program link info log for GL index %d:\n%s\n", program, infoLog)
-		program.Delete()
+	}
+
+	if status == gl.FALSE {
+		gl.DeleteProgram(program)
 		return program, errors.New("Link: " + infoLog)
 	}
 
-	program.Validate()
-	if program.Get(gl.VALIDATE_STATUS) == int(gl.FALSE) {
-		infoLog := program.GetInfoLog()
+	gl.ValidateProgram(program)
+	gl.GetProgramiv(program, gl.VALIDATE_STATUS, &status)
+	infoLog = getProgramInfoLog(program)
+	if len(infoLog) > 0 {
 		GLogErr("Program validate info log for GL index %d:\n%s\n", program, infoLog)
-		program.Delete()
+	}
+	if status == gl.FALSE {
+		gl.DeleteProgram(program)
 		return program, errors.New("Validate: " + infoLog)
 	}
 
 	return program, nil
 }
 
-func PrintAll(program gl.Program) {
-	fmt.Printf("--------------------\nshader programme %d info:\n", program)
-	fmt.Printf("GL_LINK_STATUS = %d\n", program.Get(gl.LINK_STATUS))
-	fmt.Printf("GL_VALIDATE_STATUS = %d\n", program.Get(gl.VALIDATE_STATUS))
-	fmt.Printf("GL_ATTACHED_SHADERS = %d\n", program.Get(gl.ATTACHED_SHADERS))
+func PrintAll(program uint32) {
+	var v int32
 
-	activeAttrs := program.Get(gl.ACTIVE_ATTRIBUTES)
+	fmt.Printf("--------------------\nshader programme %d info:\n", program)
+
+	gl.GetProgramiv(program, gl.LINK_STATUS, &v)
+	fmt.Printf("GL_LINK_STATUS = %d\n", v)
+
+	gl.GetProgramiv(program, gl.VALIDATE_STATUS, &v)
+	fmt.Printf("GL_VALIDATE_STATUS = %d\n", v)
+
+	gl.GetProgramiv(program, gl.ATTACHED_SHADERS, &v)
+	fmt.Printf("GL_ATTACHED_SHADERS = %d\n", v)
+
+	var activeAttrs int32
+	gl.GetProgramiv(program, gl.ACTIVE_ATTRIBUTES, &activeAttrs)
 	fmt.Printf("GL_ACTIVE_ATTRIBUTES = %d\n", activeAttrs)
 
-	for i := 0; i < activeAttrs; i++ {
-		size, typ, name := program.GetActiveAttrib(i)
+	var length int32
+	gl.GetProgramiv(program, gl.ACTIVE_ATTRIBUTE_MAX_LENGTH, &length)
+
+	var i int32
+	for i = 0; i < activeAttrs; i++ {
+		var size int32
+		var typ uint32
+		name := make([]byte, length)
+		gl.GetActiveAttrib(program, uint32(i), length, nil, &size, &typ, &name[0])
 		if size > 1 {
-			for j := 0; j < size; j++ {
+			var j int32
+			for j = 0; j < size; j++ {
 				longName := fmt.Sprintf("%s[%d]", name, j)
+				name := []byte(longName)
 				fmt.Printf(" %d) type:%s name:%s location:%d\n",
-					i, glType2String(typ), name, program.GetAttribLocation(longName))
+					i, glType2String(typ), name, gl.GetAttribLocation(program, &name[0]))
 			}
 		} else {
 			fmt.Printf(" %d) type:%s name:%s location:%d\n",
-				i, glType2String(typ), name, program.GetAttribLocation(name))
+				i, glType2String(typ), name, gl.GetAttribLocation(program, &name[0]))
 		}
 	}
 
-	activeUniforms := program.Get(gl.ACTIVE_UNIFORMS)
+	var activeUniforms int32
+	gl.GetProgramiv(program, gl.ACTIVE_UNIFORMS, &activeUniforms)
 	fmt.Printf("GL_ACTIVE_UNIFORMS = %d\n", activeUniforms)
 
-	for i := 0; i < activeUniforms; i++ {
-		size, typ, name := program.GetActiveUniform(i)
+	length = 0
+	gl.GetProgramiv(program, gl.ACTIVE_UNIFORM_MAX_LENGTH, &length)
+
+	for i = 0; i < activeUniforms; i++ {
+		var size int32
+		var typ uint32
+		name := make([]byte, length)
+		gl.GetActiveUniform(program, uint32(i), length, nil, &size, &typ, &name[0])
 		if size > 1 {
-			for j := 0; j < size; j++ {
+			var j int32
+			for j = 0; j < size; j++ {
 				longName := fmt.Sprintf("%s[%d]", name, j)
+				name = []byte(longName)
 				fmt.Printf(" %d) type:%s name:%s location:%d\n",
-					i, glType2String(typ), name, program.GetUniformLocation(longName))
+					i, glType2String(typ), name, gl.GetUniformLocation(program, &name[0]))
 			}
 		} else {
 			fmt.Printf(" %d) type:%s name:%s location:%d\n",
-				i, glType2String(typ), name, program.GetUniformLocation(name))
+				i, glType2String(typ), name, gl.GetUniformLocation(program, &name[0]))
 		}
 	}
 
-	fmt.Printf("Program info log for GL index %d:\n%s", program, program.GetInfoLog())
+	if infoLog := getProgramInfoLog(program); len(infoLog) > 0 {
+		fmt.Printf("Program info log for GL index %d:\n%s", program, infoLog)
+	}
 }
 
-func glType2String(typ gl.GLenum) string {
+func glType2String(typ uint32) string {
 	switch typ {
 	case gl.BOOL:
 		return "bool"

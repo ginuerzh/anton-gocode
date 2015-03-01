@@ -3,32 +3,32 @@ package main
 import (
 	"../common"
 	"fmt"
-	"github.com/go-gl/gl"
-	glfw "github.com/go-gl/glfw3"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.1/glfw"
 	"os"
 )
 
-func createVbo() gl.Buffer {
-	points := []gl.GLfloat{
+func createVbo() (buffer uint32) {
+	points := []float32{
 		0.0, 0.5, 0.0,
 		0.5, -0.5, 0.0,
 		-0.5, -0.5, 0.0,
 	}
-	buffer := gl.GenBuffer()
-	buffer.Bind(gl.ARRAY_BUFFER)
-	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, points, gl.STATIC_DRAW)
+	gl.GenBuffers(1, &buffer)
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffer)
+	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
 
-	return buffer
+	return
 }
 
-func createVao() gl.VertexArray {
-	vao := gl.GenVertexArray()
-	vao.Bind()
-	var attrLoc gl.AttribLocation = 0
-	attrLoc.EnableArray()
-	attrLoc.AttribPointer(3, gl.FLOAT, false, 0, nil)
+func createVao() (array uint32) {
+	gl.GenVertexArrays(1, &array)
+	gl.BindVertexArray(array)
+	var index uint32 = 0
+	gl.EnableVertexArrayAttrib(array, index)
+	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, nil)
 
-	return vao
+	return
 }
 
 func main() {
@@ -44,42 +44,43 @@ func main() {
 	gl.DepthFunc(gl.LESS)
 
 	buffer := createVbo()
-	defer buffer.Delete()
+	defer gl.DeleteBuffers(1, &buffer)
 
 	vao := createVao()
-	defer vao.Delete()
+	defer gl.DeleteVertexArrays(1, &vao)
 
 	vs, err := common.CreateShaderFile(gl.VERTEX_SHADER, "vs.glsl")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	defer vs.Delete()
+	defer gl.DeleteShader(vs)
 
 	fs, err := common.CreateShaderFile(gl.FRAGMENT_SHADER, "fs.glsl")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	defer fs.Delete()
+	defer gl.DeleteShader(fs)
 
 	program, err := common.CreateProgram(vs, fs)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	defer program.Delete()
+	defer gl.DeleteProgram(program)
 
 	common.PrintAll(program)
 
-	colorLoc := program.GetUniformLocation("inputColour")
+	name := []byte("inputColour")
+	colorLoc := gl.GetUniformLocation(program, &name[0])
 	if colorLoc < 0 {
 		fmt.Fprintf(os.Stderr, "Can't find uniform %s, location %d\n",
-			"inputColour", colorLoc)
+			name, colorLoc)
 		return
 	}
-	program.Use()
-	colorLoc.Uniform4f(1.0, 0.0, 0.0, 1.0)
+	gl.UseProgram(program)
+	gl.ProgramUniform4f(program, colorLoc, 1.0, 0.0, 0.0, 1.0)
 
 	for !window.ShouldClose() {
 		common.ShowFPS(window)
