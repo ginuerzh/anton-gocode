@@ -97,11 +97,10 @@ func StartGL(title string) (window *glfw.Window, err error) {
 		return
 	}
 
-	vendor := gl.GetString(gl.VENDOR)
-	GLog("Vendor: %s\n", vendor)
-	GLog("Renderer: %s\n", gl.GetString(gl.RENDERER))
-	GLog("Version: %s\n", gl.GetString(gl.VERSION))
-	GLog("Shading language version: %s\n", gl.GetString(gl.SHADING_LANGUAGE_VERSION))
+	GLog("Vendor: %s\n", gl.GoStr(gl.GetString(gl.VENDOR)))
+	GLog("Renderer: %s\n", gl.GoStr(gl.GetString(gl.RENDERER)))
+	GLog("Version: %s\n", gl.GoStr(gl.GetString(gl.VERSION)))
+	GLog("Shading language version: %s\n", gl.GoStr(gl.GetString(gl.SHADING_LANGUAGE_VERSION)))
 	//GLog("Extensions: %s\n\n", gl.GetString(gl.EXTENSIONS))
 
 	logGLParams()
@@ -258,14 +257,37 @@ func CreateShaderFile(shaderType uint32, filename string) (uint32, error) {
 
 func getShanderInfoLog(shader uint32) string {
 	var length int32
-	var infoLog []byte
+	infoLog := make([]byte, 1)
 	gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &length)
 	if length > 0 {
 		infoLog = make([]byte, length)
 		gl.GetShaderInfoLog(shader, length, nil, &infoLog[0])
 	}
 
-	return string(infoLog)
+	return gl.GoStr(&infoLog[0])
+}
+
+func shaderTypeStr(stype uint32) string {
+	switch stype {
+	case gl.FRAGMENT_SHADER:
+		return "fragment shader"
+	case gl.VERTEX_SHADER:
+		return "vertex shader"
+	default:
+		return "unknown shader" // TODO: add more shaders
+	}
+}
+
+func getShaderSource(shader uint32) string {
+	var length int32
+	ss := make([]byte, 1)
+	gl.GetShaderiv(shader, gl.SHADER_SOURCE_LENGTH, &length)
+	if length > 0 {
+		ss = make([]byte, length)
+		gl.GetShaderSource(shader, length, nil, &ss[0])
+	}
+
+	return gl.GoStr(&ss[0])
 }
 
 func CreateShader(shaderType uint32, src []byte) (uint32, error) {
@@ -287,19 +309,21 @@ func CreateShader(shaderType uint32, src []byte) (uint32, error) {
 		return shader, errors.New("Compile: " + infoLog)
 	}
 
+	GLog("%s:\n%s\n", shaderTypeStr(shaderType), getShaderSource(shader))
+
 	return shader, nil
 }
 
 func getProgramInfoLog(program uint32) string {
 	var length int32
-	var infoLog []byte
+	infoLog := make([]byte, 1)
 	gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &length)
 	if length > 0 {
 		infoLog = make([]byte, length)
 		gl.GetProgramInfoLog(program, length, nil, &infoLog[0])
 	}
 
-	return string(infoLog)
+	return gl.GoStr(&infoLog[0])
 }
 
 func CreateProgram(shaders ...uint32) (uint32, error) {

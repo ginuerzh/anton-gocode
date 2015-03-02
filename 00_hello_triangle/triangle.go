@@ -7,7 +7,6 @@ import (
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.1/glfw"
 	"runtime"
-	"unsafe"
 )
 
 var (
@@ -39,7 +38,7 @@ func createVbo() (buffer uint32) {
 	}
 	gl.GenBuffers(1, &buffer)
 	gl.BindBuffer(gl.ARRAY_BUFFER, buffer)
-	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, unsafe.Pointer(&points[0]), gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
 
 	return
 }
@@ -48,8 +47,8 @@ func createVao() (array uint32) {
 	gl.GenVertexArrays(1, &array)
 	gl.BindVertexArray(array)
 	var index uint32 = 0
-	gl.EnableVertexArrayAttrib(array, index)
-	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, nil)
+	gl.EnableVertexAttribArray(index)
+	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
 	return
 }

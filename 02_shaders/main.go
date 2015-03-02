@@ -6,7 +6,12 @@ import (
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.1/glfw"
 	"os"
+	"runtime"
 )
+
+func init() {
+	runtime.LockOSThread()
+}
 
 func createVbo() (buffer uint32) {
 	points := []float32{
@@ -21,12 +26,12 @@ func createVbo() (buffer uint32) {
 	return
 }
 
-func createVao() (array uint32) {
-	gl.GenVertexArrays(1, &array)
-	gl.BindVertexArray(array)
+func createVao() (vao uint32) {
+	gl.GenVertexArrays(1, &vao)
+	gl.BindVertexArray(vao)
 	var index uint32 = 0
-	gl.EnableVertexArrayAttrib(array, index)
-	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, nil)
+	gl.EnableVertexAttribArray(index)
+	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
 	return
 }
@@ -80,7 +85,7 @@ func main() {
 		return
 	}
 	gl.UseProgram(program)
-	gl.ProgramUniform4f(program, colorLoc, 1.0, 0.0, 0.0, 1.0)
+	gl.Uniform4f(colorLoc, 1.0, 0.0, 0.0, 1.0)
 
 	for !window.ShouldClose() {
 		common.ShowFPS(window)

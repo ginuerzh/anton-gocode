@@ -4,8 +4,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/go-gl/gl"
-	glfw "github.com/go-gl/glfw3"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.1/glfw"
 	"os"
 	"runtime"
 	"time"
@@ -52,7 +52,7 @@ func restartGLLog() error {
 	return nil
 }
 
-func glLog(message string, a ...interface{}) error {
+func GLog(message string, a ...interface{}) error {
 	file, err := os.OpenFile(glLogFile, os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
@@ -68,7 +68,7 @@ func glLog(message string, a ...interface{}) error {
 }
 
 func logGLParams() {
-	params := []gl.GLenum{
+	params := []uint32{
 		gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS,
 		gl.MAX_CUBE_MAP_TEXTURE_SIZE,
 		gl.MAX_DRAW_BUFFERS,
@@ -97,28 +97,28 @@ func logGLParams() {
 		"GL_STEREO",
 	}
 
-	glLog("GL Context Params:\n")
+	GLog("GL Context Params:\n")
 
 	p := make([]int32, 2)
 	for i, v := range params {
 		if v == gl.STEREO {
-			p := make([]bool, 1)
-			gl.GetBooleanv(v, p)
-			glLog("%s %v\n", names[i], p[0])
+			p := false
+			gl.GetBooleanv(v, &p)
+			GLog("%s %v\n", names[i], p)
 			continue
 		}
 
 		p[0] = 0
 		p[1] = 0
-		gl.GetIntegerv(v, p)
+		gl.GetIntegerv(v, &p[0])
 		if v == gl.MAX_VIEWPORT_DIMS {
-			glLog("%s %d %d\n", names[i], p[0], p[1])
+			GLog("%s %d %d\n", names[i], p[0], p[1])
 			continue
 		}
-		glLog("%s %d\n", names[i], p[0])
+		GLog("%s %d\n", names[i], p[0])
 	}
 
-	glLog("-----------------------------\n")
+	GLog("-----------------------------\n")
 }
 
 var prevSecs float64
@@ -137,120 +137,151 @@ func updateFPSCounter(window *glfw.Window) {
 }
 
 /* we can run a full-screen window here */
-func fullScreen() (width int, height int, monitor *glfw.Monitor, err error) {
-	glLog("Full Screen Mode\n")
+func fullscr() (width int, height int, monitor *glfw.Monitor, err error) {
+	GLog("Full Screen Mode\n")
 
-	monitor, err = glfw.GetPrimaryMonitor()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't get primary monitor")
-		return
-	}
-	vm, err := monitor.GetVideoMode()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't get video mode")
-		return
-	}
+	monitor = glfw.GetPrimaryMonitor()
+	vm := monitor.GetVideoMode()
 
-	vms, err := monitor.GetVideoModes()
-	if err == nil {
-		for _, vm := range vms {
-			glLog("(%d*%d, %dHZ)\n", vm.Width, vm.Height, vm.RefreshRate)
-		}
-	}
-
-	name, _ := monitor.GetName()
-	glLog("Primary monitor: %s (%d*%d, %dHZ)\n\n",
-		name, vm.Width, vm.Height, vm.RefreshRate)
+	GLog("Primary monitor: %s (%d*%d, %dHZ)\n\n",
+		monitor.GetName(), vm.Width, vm.Height, vm.RefreshRate)
 
 	return vm.Width, vm.Height, monitor, nil
 }
 
-func createVbo() gl.Buffer {
-	points := []gl.GLfloat{
+func createVbo() (buffer uint32) {
+	points := []float32{
 		0.0, 0.5, 0.0,
 		0.5, -0.5, 0.0,
 		-0.5, -0.5, 0.0,
 	}
-	buffer := gl.GenBuffer()
-	buffer.Bind(gl.ARRAY_BUFFER)
-	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, points, gl.STATIC_DRAW)
+	gl.GenBuffers(1, &buffer)
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffer)
+	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
 
-	return buffer
+	return
 }
 
-func createVao() gl.VertexArray {
-	vao := gl.GenVertexArray()
-	vao.Bind()
-	var attrLoc gl.AttribLocation = 0
-	attrLoc.EnableArray()
-	attrLoc.AttribPointer(3, gl.FLOAT, false, 0, nil)
+func createVao() (array uint32) {
+	gl.GenVertexArrays(1, &array)
+	gl.BindVertexArray(array)
+	var index uint32 = 0
+	gl.EnableVertexAttribArray(index)
+	gl.VertexAttribPointer(index, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
-	return vao
+	return
 }
 
-func createShader(shaderType gl.GLenum, src []byte) (gl.Shader, error) {
+func getShanderInfoLog(shader uint32) string {
+	var length int32
+	var infoLog []byte
+	gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &length)
+	if length > 0 {
+		infoLog = make([]byte, length)
+		gl.GetShaderInfoLog(shader, length, nil, &infoLog[0])
+	}
+
+	return string(infoLog)
+}
+
+func CreateShader(shaderType uint32, src []byte) (uint32, error) {
 	shader := gl.CreateShader(shaderType)
-	shader.Source(string(src))
-	shader.Compile()
+	xstring := &src[0]
+	gl.ShaderSource(shader, 1, &xstring, nil)
+	gl.CompileShader(shader)
 
-	if shader.Get(gl.COMPILE_STATUS) == int(gl.FALSE) {
-		infoLog := shader.GetInfoLog()
-		shader.Delete()
+	var status int32
+	gl.GetShaderiv(shader, gl.COMPILE_STATUS, &status)
+
+	infoLog := getShanderInfoLog(shader)
+	if len(infoLog) > 0 {
+		fmt.Printf("shader info log for GL index %d:\n%s\n", shader, infoLog)
+	}
+
+	if status == gl.FALSE {
+		gl.DeleteShader(shader)
 		return shader, errors.New("Compile: " + infoLog)
 	}
 
 	return shader, nil
 }
 
-func createProgram(shaders ...gl.Shader) (gl.Program, error) {
+func getProgramInfoLog(program uint32) string {
+	var length int32
+	var infoLog []byte
+	gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &length)
+	if length > 0 {
+		infoLog = make([]byte, length)
+		gl.GetProgramInfoLog(program, length, nil, &infoLog[0])
+	}
+
+	return string(infoLog)
+}
+
+func CreateProgram(shaders ...uint32) (uint32, error) {
 	program := gl.CreateProgram()
 
 	for _, shader := range shaders {
-		program.AttachShader(shader)
+		gl.AttachShader(program, shader)
 	}
 
-	program.Link()
-	if program.Get(gl.LINK_STATUS) == int(gl.FALSE) {
-		infoLog := program.GetInfoLog()
-		program.Delete()
+	gl.LinkProgram(program)
+
+	var status int32
+	gl.GetProgramiv(program, gl.LINK_STATUS, &status)
+
+	infoLog := getProgramInfoLog(program)
+	if len(infoLog) > 0 {
+		fmt.Printf("Program link info log for GL index %d:\n%s\n", program, infoLog)
+	}
+
+	if status == gl.FALSE {
+		gl.DeleteProgram(program)
 		return program, errors.New("Link: " + infoLog)
 	}
 
-	program.Validate()
-	if program.Get(gl.VALIDATE_STATUS) == int(gl.FALSE) {
-		infoLog := program.GetInfoLog()
-		program.Delete()
+	gl.ValidateProgram(program)
+	gl.GetProgramiv(program, gl.VALIDATE_STATUS, &status)
+	infoLog = getProgramInfoLog(program)
+	if len(infoLog) > 0 {
+		fmt.Printf("Program validate info log for GL index %d:\n%s\n", program, infoLog)
+	}
+	if status == gl.FALSE {
+		gl.DeleteProgram(program)
 		return program, errors.New("Validate: " + infoLog)
 	}
 
 	return program, nil
 }
+
 func main() {
 	restartGLLog()
-	glLog("starting GLFW\n%s\n\n", glfw.GetVersionString())
+	GLog("starting GLFW\n%s\n\n", glfw.GetVersionString())
 
-	glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
-		glLog("GLFW ERROR: code %d msg: %s\n", err, desc)
-	})
+	/*
+		glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
+			glLog("GLFW ERROR: code %d msg: %s\n", err, desc)
+		})
+	*/
 
-	if !glfw.Init() {
-		panic("ERROR: could not start GLFW3")
+	if err := glfw.Init(); err != nil {
+		panic(err)
 	}
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.ContextVersionMajor, major)
 	glfw.WindowHint(glfw.ContextVersionMinor, minor)
 	if forward && major >= 3 {
-		glfw.WindowHint(glfw.OpenglForwardCompatible, 1)
+		glfw.WindowHint(glfw.OpenGLForwardCompatible, 1)
 	}
 	if core && major >= 3 && minor >= 2 {
-		glfw.WindowHint(glfw.OpenglProfile, glfw.OpenglCoreProfile)
+		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	}
 	glfw.WindowHint(glfw.Samples, 16)
 
 	var monitor *glfw.Monitor
 	if fullscreen {
-		width, height, monitor, _ = fullScreen()
+		width, height, monitor, _ = fullscr()
 	}
 
 	window, err := glfw.CreateWindow(width, height, title, monitor, nil)
@@ -267,15 +298,15 @@ func main() {
 
 	window.MakeContextCurrent()
 
-	if r := gl.Init(); r > 0 {
-		fmt.Println("init opengl:", r)
+	if err := gl.Init(); err != nil {
+		panic(err)
 	}
 
-	glLog("Vendor: %s\n", gl.GetString(gl.VENDOR))
-	glLog("Renderer: %s\n", gl.GetString(gl.RENDERER))
-	glLog("Version: %s\n", gl.GetString(gl.VERSION))
-	glLog("Shading language version: %s\n", gl.GetString(gl.SHADING_LANGUAGE_VERSION))
-	glLog("Extensions: %s\n\n", gl.GetString(gl.EXTENSIONS))
+	GLog("Vendor: %s\n", gl.GoStr(gl.GetString(gl.VENDOR)))
+	GLog("Renderer: %s\n", gl.GoStr(gl.GetString(gl.RENDERER)))
+	GLog("Version: %s\n", gl.GoStr(gl.GetString(gl.VERSION)))
+	GLog("Shading language version: %s\n", gl.GoStr(gl.GetString(gl.SHADING_LANGUAGE_VERSION)))
+	GLog("Extensions: %s\n\n", gl.GoStr(gl.GetString(gl.EXTENSIONS)))
 
 	logGLParams()
 
@@ -283,10 +314,10 @@ func main() {
 	gl.DepthFunc(gl.LESS)
 
 	buffer := createVbo()
-	defer buffer.Delete()
+	defer gl.DeleteBuffers(1, &buffer)
 
 	vao := createVao()
-	defer vao.Delete()
+	defer gl.DeleteVertexArrays(1, &vao)
 
 	vertex_shader := `
 	#version 330
@@ -303,33 +334,33 @@ func main() {
 		frag_colour = vec4 (0.5, 0.0, 0.5, 1.0);
 	}
 `
-	vs, err := createShader(gl.VERTEX_SHADER, []byte(vertex_shader))
+	vs, err := CreateShader(gl.VERTEX_SHADER, []byte(vertex_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer vs.Delete()
+	defer gl.DeleteShader(vs)
 
-	fs, err := createShader(gl.FRAGMENT_SHADER, []byte(fragment_shader))
+	fs, err := CreateShader(gl.FRAGMENT_SHADER, []byte(fragment_shader))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer fs.Delete()
+	defer gl.DeleteShader(fs)
 
-	program, err := createProgram(vs, fs)
+	program, err := CreateProgram(vs, fs)
 	if err != nil {
 		fmt.Println(err)
 	}
-	defer program.Delete()
+	defer gl.DeleteProgram(program)
 
 	for !window.ShouldClose() {
 		updateFPSCounter(window)
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-		gl.Viewport(0, 0, width, height)
+		gl.Viewport(0, 0, int32(width), int32(height))
 
-		program.Use()
+		gl.UseProgram(program)
 		gl.DrawArrays(gl.TRIANGLES, 0, 3)
 
 		glfw.PollEvents()
