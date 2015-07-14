@@ -28,7 +28,7 @@ func init() {
 	flag.BoolVar(&fullscreen, "full", false, "Fullscreen")
 	flag.BoolVar(&core, "core", true, "Core Profile")
 	flag.BoolVar(&forward, "forward", true, "Forward Compatible")
-	flag.StringVar(&title, "title", "OpenGL Demo", "Widnow Title")
+	flag.StringVar(&title, "title", "01 - Extended Init", "Widnow Title")
 	flag.Parse()
 }
 
@@ -130,7 +130,7 @@ func updateFPSCounter(window *glfw.Window) {
 	if elapsedSecs > 0.25 {
 		prevSecs = curSecs
 		fps := float64(frameCount) / elapsedSecs
-		window.SetTitle(fmt.Sprintf("opengl @ fps: %.2f", fps))
+		window.SetTitle(title + fmt.Sprintf(" @ fps: %.2f", fps))
 		frameCount = 0
 	}
 	frameCount++

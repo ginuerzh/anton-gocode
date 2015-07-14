@@ -44,6 +44,10 @@ func init() {
 	flag.Parse()
 }
 
+func WindowSize() (w, h int) {
+	return config.Width, config.Height
+}
+
 func StartGL(title string) (window *glfw.Window, err error) {
 	restartGLLog()
 

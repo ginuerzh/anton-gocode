@@ -26,7 +26,6 @@ func init() {
 	flag.IntVar(&height, "h", 480, "Window Height")
 	flag.BoolVar(&core, "core", true, "Core Profile")
 	flag.BoolVar(&forward, "forward", true, "Forward Compatible")
-	flag.StringVar(&title, "title", "OpenGL Demo", "Widnow Title")
 	flag.Parse()
 }
 
@@ -155,7 +154,7 @@ func main() {
 	if core && major >= 3 && minor >= 2 {
 		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	}
-	window, err := glfw.CreateWindow(width, height, title, nil, nil)
+	window, err := glfw.CreateWindow(width, height, "00 - Hello Triangle", nil, nil)
 	if err != nil {
 		panic(err)
 	}

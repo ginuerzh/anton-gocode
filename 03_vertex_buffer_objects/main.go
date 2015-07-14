@@ -1,8 +1,8 @@
 package main
 
 import (
-	"../common"
 	"fmt"
+	"github.com/ginuerzh/anton-gocode/common"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.1/glfw"
 	"os"
@@ -49,7 +49,7 @@ func createVao(buffers []uint32) (vao uint32) {
 }
 
 func main() {
-	window, err := common.StartGL("02_shaders")
+	window, err := common.StartGL("03 - Vertex Buffer Objects")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"../common"
 	"fmt"
+	"github.com/ginuerzh/anton-gocode/common"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.1/glfw"
 	"os"
@@ -37,7 +37,7 @@ func createVao() (vao uint32) {
 }
 
 func main() {
-	window, err := common.StartGL("02_shaders")
+	window, err := common.StartGL("02 - Shaders")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return

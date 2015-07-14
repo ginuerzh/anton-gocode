@@ -1,8 +1,9 @@
 package main
 
 import (
-	"../common"
 	"fmt"
+	"github.com/ginuerzh/anton-gocode/common"
+	//"github.com/ginuerzh/math3d/m32"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.1/glfw"
 	"math"
@@ -50,7 +51,7 @@ func createVao(buffers []uint32) (vao uint32) {
 }
 
 func main() {
-	window, err := common.StartGL("02_shaders")
+	window, err := common.StartGL("04 - Mats and Vecs")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
@@ -99,8 +100,10 @@ func main() {
 		0.5, 0.0, 0.0, 1.0, // fourth column
 	}
 
-	name := []byte("matrix")
-	matLoc := gl.GetUniformLocation(program, &name[0])
+	//matrix := m32.Ident4().Translate(m32.NewVec3(0.5, 0, 0))
+
+	//name := []byte("matrix")
+	matLoc := gl.GetUniformLocation(program, gl.Str("matrix\x00"))
 	gl.UniformMatrix4fv(matLoc, 1, false, &matrix[0])
 
 	gl.Enable(gl.CULL_FACE)
@@ -123,6 +126,7 @@ func main() {
 
 		lastPos = elapsedSecs*speed + lastPos
 		matrix[12] = float32(lastPos)
+		// matrix = m32.Ident4().Translate(m32.NewVec3(float32(lastPos), 0, 0))
 		if math.Abs(lastPos) > 1.0 {
 			speed = -speed
 		}

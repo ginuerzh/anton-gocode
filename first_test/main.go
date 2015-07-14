@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/go-gl/gl"
-	glfw "github.com/go-gl/glfw3"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.1/glfw"
 )
 
 var (
@@ -27,22 +27,24 @@ func init() {
 }
 
 func main() {
-	glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
-		fmt.Printf("[error] %v: %v\n", err, desc)
-	})
+	/*
+		glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
+			fmt.Printf("[error] %v: %v\n", err, desc)
+		})
+	*/
 
-	if !glfw.Init() {
-		panic("Can't init glfw!")
+	if err := glfw.Init(); err != nil {
+		panic(err)
 	}
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.ContextVersionMajor, major)
 	glfw.WindowHint(glfw.ContextVersionMinor, minor)
 	if forward && major >= 3 {
-		glfw.WindowHint(glfw.OpenglForwardCompatible, 1)
+		glfw.WindowHint(glfw.OpenGLForwardCompatible, 1)
 	}
 	if core && major >= 3 && minor >= 2 {
-		glfw.WindowHint(glfw.OpenglProfile, glfw.OpenglCoreProfile)
+		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	}
 	window, err := glfw.CreateWindow(width, height, title, nil, nil)
 	if err != nil {
@@ -52,15 +54,13 @@ func main() {
 
 	window.MakeContextCurrent()
 
-	vendor := gl.GetString(gl.VENDOR)
-	version := gl.GetString(gl.VERSION)
-	renderer := gl.GetString(gl.RENDERER)
-	shaderVer := gl.GetString(gl.SHADING_LANGUAGE_VERSION)
-	extensions := gl.GetString(gl.EXTENSIONS)
+	if err = gl.Init(); err != nil {
+		panic(err)
+	}
 
-	fmt.Println("Vendor:", vendor)
-	fmt.Println("Renderer:", renderer)
-	fmt.Println("OpenGL version supported", version)
-	fmt.Println("Shading language version string:", shaderVer)
-	fmt.Println("Extensions:", extensions)
+	fmt.Println("Vendor:", gl.GoStr(gl.GetString(gl.VENDOR)))
+	fmt.Println("Renderer:", gl.GoStr(gl.GetString(gl.VERSION)))
+	fmt.Println("OpenGL version supported", gl.GoStr(gl.GetString(gl.RENDERER)))
+	fmt.Println("Shading language version string:", gl.GoStr(gl.GetString(gl.SHADING_LANGUAGE_VERSION)))
+	fmt.Println("Extensions:", gl.GoStr(gl.GetString(gl.EXTENSIONS)))
 }
