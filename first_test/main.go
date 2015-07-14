@@ -27,12 +27,6 @@ func init() {
 }
 
 func main() {
-	/*
-		glfw.SetErrorCallback(func(err glfw.ErrorCode, desc string) {
-			fmt.Printf("[error] %v: %v\n", err, desc)
-		})
-	*/
-
 	if err := glfw.Init(); err != nil {
 		panic(err)
 	}
